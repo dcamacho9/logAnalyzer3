@@ -1,0 +1,57 @@
+===============================================================================
+POLÍTICA DE SEGURIDAD, PRIVACIDAD Y CUMPLIMIENTO (LOG-ANALYZER-AGENT)
+===============================================================================
+
+1. REDACCIÓN Y SANITIZACIÓN DE DATOS PERSONALES (PII)
+-------------------------------------------------------------------------------
+Antes de que cualquier traza de log sea enviada al LLM o impresa en las pantallas
+del operador, se debe aplicar una máscara de redacción irreversible sobre los
+siguientes elementos:
+
+*   Direcciones IP Públicas: Reemplazar por máscaras parciales manteniendo 
+    únicamente el octeto final para diagnóstico de red.
+    -> Regex sugerida: \b\d{1,3}\.\d{1,3}\.\d{1,3}\.(\d{1,3})\b
+    -> Reemplazo: xxx.xxx.xxx.\1
+*   Correos Electrónicos: Anonimizar por completo el nombre de usuario y el dominio.
+    -> Regex sugerida: [\w\.-]+@[\w\.-]+\.\w+
+    -> Reemplazo: ****@domain.com
+*   Tokens JWT y Hashes de Sesión: Si una cookie o token de autorización HTTP (Bearer)
+    aparece en las cabeceras capturadas por el log, debe ser destruido completamente.
+    -> Reemplazo: [REDACTED_AUTH_TOKEN]
+
+2. GESTIÓN VOLÁTIL DE SECRETOS Y CREDENCIALES
+-------------------------------------------------------------------------------
+Para evitar la fuga de credenciales en entornos multi-inquilino o logs de auditoría:
+
+*   Origen de Datos Único: Los secretos corporativos (Passwords, Client Secrets) 
+    deben leerse exclusivamente desde la memoria volátil del sistema operativo 
+    ($env: en PowerShell o os.environ en Python).
+*   Prohibición de Entrada de Texto (Chat Input): El agente jamás debe solicitar 
+    al usuario que escriba una contraseña o secreto directamente en el prompt.
+*   Persistencia en Disco: Queda estrictamente prohibido volcar tokens de acceso 
+    OAuth o contraseñas en archivos temporales, bases de datos locales o archivos 
+    de texto plano dentro del repositorio.
+*   Ciclo de Vida: Al cerrarse la sesión del terminal o completarse la ejecución 
+    del pipeline en `agent.py`, las variables de entorno del Token deben quedar 
+    destruidas o expirar de manera natural.
+
+3. MÁSCARA TÉCNICA EN REPORTES (VISUALIZACIÓN DE TOKENS)
+-------------------------------------------------------------------------------
+Al generar confirmaciones de tokens de acceso para auditorías operativas:
+
+*   Regla de los 4 caracteres: Solo está permitido mostrar los últimos 4 caracteres
+    del access_token para verificación manual del operador. El resto debe ser
+    reemplazado por asteriscos.
+    -> Formato correcto: Bearer ****43a1
+    -> Formato incorrecto: Bearer a1b2c3d4... (Exposición parcial extensa)
+
+4. PREVENCIÓN DE BUCLES DE ESCALADO E INYECCIÓN DE CÓDIGO (ITSM)
+-------------------------------------------------------------------------------
+*   Deduplicación Mandatoria: Ningún incidente puede enviarse a la API de ServiceNow
+    sin pasar por el cálculo del hash SHA-256 basado en la firma del error. Esto
+    previene la degradación del servicio de ITSM (Denegación de Servicio Autoinfligida)
+    si un microservicio genera miles de logs idénticos por segundo.
+*   Sanitización de Payloads: Las descripciones y notas de trabajo (work notes)
+    enviadas a ServiceNow deben ser strings sanitizados de caracteres de escape para
+    evitar ataques de inyección de código o scripts maliciosos en los dashboards de
+    ServiceNow.
