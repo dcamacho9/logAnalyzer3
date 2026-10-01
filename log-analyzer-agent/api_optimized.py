@@ -17,6 +17,7 @@ from agent_optimized import (
     MODEL_NAME, 
     OLLAMA_API_URL,
     ENABLE_STREAMING,
+    LAST_OLLAMA_ERROR,
     print_cache_stats
 )
 print(OLLAMA_API_URL)
@@ -201,6 +202,7 @@ Proporciona:
             return jsonify({
                 "status": "error",
                 "message": "Falló la generación del diagnóstico en Ollama",
+                "detail": LAST_OLLAMA_ERROR["message"] or "Ollama devolvió una respuesta vacía",
                 "step": "3_ollama_inference",
                 "cache_hit": cache_hit
             }), 500
