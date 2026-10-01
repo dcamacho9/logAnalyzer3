@@ -5,3 +5,8 @@
 flask
 openai
 gunicorn
+requests
+python-dotenv
+truststore
+pandas
+numpy
