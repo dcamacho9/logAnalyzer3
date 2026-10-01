@@ -177,6 +177,7 @@ OLLAMA_GENERATE_URL = f"{OLLAMA_API_URL}/api/generate"
 MODEL_NAME = os.getenv("OLLAMA_MODEL", "llama3.2:1b:cloud")  # ✅ Cambiado a phi:2.7b (más ligero)
 ENABLE_STREAMING = os.getenv("ENABLE_STREAMING", "true").lower() == "true"
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "90"))
+LAST_OLLAMA_ERROR = {"message": None}
 
 # Validar configuración
 def _validate_ollama_config():
@@ -293,6 +294,7 @@ def call_ollama(prompt_content: str) -> tuple:
     }
     
     start_time = time.time()
+    LAST_OLLAMA_ERROR["message"] = None
     
     try:
         print(f"[*] Enviando solicitud a Ollama ({MODEL_NAME})...")
@@ -306,7 +308,10 @@ def call_ollama(prompt_content: str) -> tuple:
             stream=ENABLE_STREAMING,
             timeout=OLLAMA_TIMEOUT
         )
-        response.raise_for_status()
+        if not response.ok:
+            LAST_OLLAMA_ERROR["message"] = f"HTTP {response.status_code} desde {OLLAMA_GENERATE_URL}: {response.text[:500]}"
+            print(f"> [!ERROR] {LAST_OLLAMA_ERROR['message']}")
+            return "", time.time() - start_time
         
         # Procesar respuesta
         if ENABLE_STREAMING:
@@ -319,6 +324,10 @@ def call_ollama(prompt_content: str) -> tuple:
                 if line:
                     try:
                         data = json.loads(line)
+                        if data.get("error"):
+                            LAST_OLLAMA_ERROR["message"] = f"Ollama: {data['error']}"
+                            print(f"> [!ERROR] {LAST_OLLAMA_ERROR['message']}")
+                            break
                         chunk = data.get("response", "")
                         full_response += chunk
                         chunk_count += 1
@@ -355,13 +364,15 @@ def call_ollama(prompt_content: str) -> tuple:
             
     except requests.exceptions.Timeout:
         elapsed = time.time() - start_time
+        LAST_OLLAMA_ERROR["message"] = f"Timeout tras {elapsed:.1f}s llamando a {OLLAMA_GENERATE_URL}"
         print(f"\n> [!CAUTION]")
         print(f"> **Timeout**: Ollama tardó más de 30 segundos ({elapsed:.1f}s)")
         print("> Considera usar /api/analyze-fast para máxima velocidad")
         return "", elapsed
         
-    except requests.exceptions.ConnectionError:
+    except requests.exceptions.ConnectionError as e:
         elapsed = time.time() - start_time
+        LAST_OLLAMA_ERROR["message"] = f"No se pudo conectar con {OLLAMA_GENERATE_URL}: {e}"
         print(f"\n> [!CAUTION]")
         print(f"> **Error de Conexión**: No se puede conectar con Ollama ({elapsed:.1f}s)")
         print(f"> Verifica que OLLAMA está corriendo: ollama serve")
@@ -369,6 +380,7 @@ def call_ollama(prompt_content: str) -> tuple:
         
     except Exception as e:
         elapsed = time.time() - start_time
+        LAST_OLLAMA_ERROR["message"] = str(e)
         print(f"\n> [!ERROR] {e} ({elapsed:.1f}s)")
         return "", elapsed
 
